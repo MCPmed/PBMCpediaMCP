@@ -107,6 +107,9 @@ async function fetch_pbmcpedia_per_celltype(
 	desired_properties: Array<string>,
 	result_name: string,
 ) {
+	if (celltypes.length == 0) {
+		celltypes.push("");
+	}
 	for (let celltype of celltypes) {
 		try {
 			let response = await fetch(
@@ -116,6 +119,7 @@ async function fetch_pbmcpedia_per_celltype(
 				return server_error(response.status);
 			}
 			let response_parsed: Array<{
+				cell_type: string;
 				[key: string]: any;
 			}> = (await response.json())["results"];
 			console.log(response_parsed);
@@ -128,11 +132,38 @@ async function fetch_pbmcpedia_per_celltype(
 						properties[property] = item.pathway_decription;
 					}
 				}
-				return properties;
+				let new_properties: { cell_type: string; [key: string]: any } =
+					properties;
+				return new_properties;
 			});
-			let result_obj = { cell_type: celltype };
-			result_obj[result_name] = result_arr;
-			results_array.push(result_obj);
+			if (celltype == "") {
+				let result_map: Map<
+					string,
+					[
+						{
+							cell_type: string;
+							[key: string]: string | [{ [key: string]: any }];
+						},
+					]
+				> = new Map();
+				result_arr.forEach((item) => {
+					if (!result_map.has(item.cell_type)) {
+						let cool_array: Array<{ cell_type: string; [key: string]: any }> =
+							new Array();
+						result_map.set(item.cell_type, cool_array);
+					}
+					result_map.get(item.cell_type)?.push(item);
+				});
+				for (let type_obj of result_map.entries()) {
+					let result_obj = { cell_type: type_obj[0] };
+					result_obj[result_name] = type_obj[1];
+					results_array.push(result_obj);
+				}
+			} else {
+				let result_obj = { cell_type: celltype };
+				result_obj[result_name] = result_arr;
+				results_array.push(result_obj);
+			}
 		} catch (err) {
 			return {
 				content: [{ type: "text", text: "Network or server error" }],
@@ -159,15 +190,13 @@ const diseaseParam = z
 const cellTypeFineParam = z
 	.array(z.enum(TYPES_FINE))
 	.describe(
-		"List of cell types for which to query. This argument allows for querying by fine-grained cell types",
-	)
-	.default([]);
+		"List of cell types for which to query. This argument allows for querying by fine-grained cell types. The empty default does not perform restriction by cell type.",
+	);
 const cellTypeBroadParam = z
 	.array(z.enum(TYPES_BROAD))
 	.describe(
-		"List of cell types for which to query DEGs. This argument allows for querying by broad cell types.",
-	)
-	.default([]);
+		"List of cell types for which to query DEGs. This argument allows for querying by broad cell types. The empty default does not perform restriction by cell type.",
+	);
 const limitParam = z
 	.number()
 	.gt(0)
@@ -188,7 +217,7 @@ server.registerTool(
 	{
 		title: "get or summarize metadata filtered by sex and/or disease",
 		description:
-			"Queries the PBMCpedia webserver for the samples fitting the provided filters and either returns a summary or full information on the first 30 results",
+			"Queries the PBMCpedia webserver (atlas for peripheral blood mononuclear cell experiments) for the samples fitting the provided filters and either returns a summary or full information on the first 30 results",
 		inputSchema: {
 			sex: z
 				.enum(SEX_FOR_METADATA)
@@ -372,7 +401,7 @@ server.registerTool(
 	{
 		title: "Antibody Chains by Clone",
 		description:
-			"Queries the PBMCpedia webserver for the antibody chains matched to the given clonotype",
+			"Queries the PBMCpedia webserver (atlas for peripheral blood mononuclear cell experiments) for the antibody chains matched to the given clonotype",
 		inputSchema: {
 			clone: z.number().describe("ID of the clone").gte(0).int(),
 		},
@@ -542,7 +571,7 @@ server.registerTool(
 	{
 		title: "Gene Expression querying Tool",
 		description:
-			"Queries the PBMCpedia webserver for gene expression using the provided parameters. Returns a list containing the gene expression per gene and celltype.",
+			"Queries the PBMCpedia webserver (atlas for peripheral blood mononuclear cell experiments) for gene expression using the provided parameters. Returns a list containing the gene expression per gene and celltype.",
 		inputSchema: {
 			limit: limitParam,
 			offset: offsetParam,
@@ -902,7 +931,7 @@ server.registerTool(
 	{
 		title: "DEG querying Tool",
 		description:
-			"Queries the PBMCPedia webserver for DEGs using the provided parameters. Returns a list containing the DEGs. DEGs were measured between 'afflicted with disease/condition' and 'not afflicted with disease/condition'",
+			"Queries the PBMCPedia webserver (atlas for peripheral blood mononuclear cell experiments) for DEGs using the provided parameters. Returns a list containing the DEGs. DEGs were measured between 'afflicted with disease/condition' and 'not afflicted with disease/condition'",
 		inputSchema: {
 			ageGroup: ageGroupParam,
 			sex: sexParam,
@@ -1032,63 +1061,18 @@ server.registerTool(
 		};
 	},
 );
-// Add an addition tool
-server.registerTool(
-	"add",
-	{
-		title: "Addition Tool",
-		description: "Add two numbers",
-		inputSchema: { a: z.number(), b: z.number() },
-		outputSchema: { result: z.number() },
-	},
-	async ({ a, b }) => {
-		const output = { result: a + b };
-		return {
-			content: [{ type: "text", text: JSON.stringify(output) }],
-			structuredContent: output,
-		};
-	},
-);
-server.registerTool(
-	"blastn",
-	{
-		title: "ABC-HuMi BLASTn",
-		description:
-			"Perform BLASTn alignment on the ABC-HuMi database using the input sequence",
-		inputSchema: { sequence: z.string() },
-		outputSchema: { result: z.string() },
-	},
-	async ({ sequence }) => {
-		const query = cheerio.load(
-			await (
-				await fetch("https://ccb-web.cs.uni-saarland.de/abc_humi/query")
-			).text(),
-		);
-		let form = query('form[action="/abc_humi/submit_blast_search"]');
-		form.find("#option-blast-1").prop("checked", true);
-		form.find("#sequence").val(sequence);
-		return {
-			content: [
-				{ type: "text", text: JSON.stringify({ result: form.toString() }) },
-			],
-			structuredContent: { result: form.toString() },
-		};
-	},
-);
 
-// Add a dynamic greeting resource
 server.registerResource(
-	"greeting",
-	new ResourceTemplate("greeting://{name}", { list: undefined }),
+	"description",
+	new ResourceTemplate("description", { list: undefined }),
 	{
-		title: "Greeting Resource", // Display name for UI
-		description: "Dynamic greeting generator",
+		title: "Service description", // Display name for UI
 	},
-	async (uri, { name }) => ({
+	async (uri, {}) => ({
 		contents: [
 			{
 				uri: uri.href,
-				text: `Hello, ${name}!`,
+				text: `This MCP server offers tools to interact with the PBMCpedia webserver, an atlas of Peripheral Blood Mononuclear Cell experiments/studies`,
 			},
 		],
 	}),

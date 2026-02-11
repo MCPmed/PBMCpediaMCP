@@ -6,10 +6,31 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import express from "express";
 import * as cheerio from "cheerio";
 
-import { z } from "zod";
+import { unknown, z } from "zod";
+import { toLowerCase } from "zod/v4";
 
 const PBMC_API_URL = "https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/";
 const PBMC_API_URL_DOCS = "https://web.ccb.uni-saarland.de/pbmcpedia/api-docs/";
+const SEX_FOR_METADATA = ["male", "female", "unknown", ""] as const;
+const DISEASES_FOR_METADATA = [
+	"Multisystem inflammatory syndrome in children (MIS-C)",
+	"COVID-19",
+	"Parkinson's Disease (PD)",
+	"Healthy Control",
+	"Unknown",
+	"Tuberculosis (TB)",
+	"End-Stage Renal Disease (ESRD)",
+	"Relapsing Remitting Multiple Sclerosis (RRMS)",
+	"Head and neck squamous cell carcinoma (HNSCC)",
+	"Alzheimer's disease (AD)",
+	"Respiratory system disorder",
+	"Influenza",
+	"SARS-CoV-2 vaccine",
+	"Sepsis (survived)",
+	"Sepsis (non-survived)",
+	"Premature Ovarian Insufficiency (POI)",
+	"",
+] as const;
 const DISEASES = [
 	"Inflammation",
 	"Respiratory system disorder",
@@ -161,6 +182,184 @@ const offsetParam = z
 		"How many elements to skip in the beginning of the result list for every cell type (after applying other query filters and before applying the limit).",
 	);
 
+server.registerTool(
+	"getMetaData",
+	{
+		title: "get or summarize metadata filtered by sex and/or disease",
+		description:
+			"Queries the PBMCpedia webserver for the samples fitting the provided filters and either returns a summary or full information on the first 30 results",
+		inputSchema: {
+			sex: z
+				.enum(SEX_FOR_METADATA)
+				.default("")
+				.describe("Passing an empty string (the default) disables this filter"),
+			disease: z
+				.enum(DISEASES_FOR_METADATA)
+				.default("")
+				.describe("Passing an empty string (the default) disables this filter"),
+			summarize: z
+				.boolean()
+				.default(true)
+				.describe(
+					"Whether to return a summary of the metadata instead of the first 30 results",
+				),
+		},
+		outputSchema: {
+			result: z.union([
+				z
+					.array(
+						z.object({
+							sex: z.enum(SEX_FOR_METADATA),
+							disease: z.enum(DISEASES_FOR_METADATA),
+							sample_id: z.string(),
+							study_id: z.string(),
+							age: z
+								.string()
+								.describe(
+									"string containing both the age group and the exact age of the sample.",
+								),
+						}),
+					)
+					.describe("array containing the first 30 metadata entries"),
+				z.object({
+					sex_summary: z.object({
+						female: z
+							.number()
+							.describe("number of female samples matched")
+							.int()
+							.gte(0),
+						male: z
+							.number()
+							.describe("number of male samples matched")
+							.int()
+							.gte(0),
+						unknown: z
+							.number()
+							.describe("number of unknown sex samples matched")
+							.int()
+							.gte(0),
+					}),
+					disease_summary: z.array(
+						z.object({
+							disease: z.enum(DISEASES_FOR_METADATA),
+							count: z
+								.number()
+								.describe("Number of samples matched with this disease.")
+								.int()
+								.gt(0),
+						}),
+					),
+					age_summary: z
+						.object({
+							elderly: z.number().gte(0).int(),
+							young: z.number().gte(0).int(),
+							adult: z.number().gte(0).int(),
+							unknown: z.number().gte(0).int(),
+						})
+						.describe("Number of samples matched for every age group"),
+				}),
+			]),
+		},
+	},
+	async ({ disease, summarize, sex }) => {
+		let result;
+		if (summarize) {
+			let local_result: {
+				result: {
+					disease_summary: Array<{ disease: string; count: number }>;
+					[key: string]: any;
+				};
+			} = {
+				result: {
+					sex_summary: {
+						male: 0,
+						female: 0,
+						unknown: 0,
+					},
+					disease_summary: [],
+					age_summary: {
+						elderly: 0,
+						young: 0,
+						adult: 0,
+						unknown: 0,
+					},
+				},
+			};
+
+			let disease_mapping: Map<string, number> = new Map();
+
+			try {
+				let response = await fetch(
+					PBMC_API_URL_DOCS +
+						"v1/metadata" +
+						`?sex=${sex}&disease=${disease}&limit=10000`,
+				);
+				if (!response.ok) {
+					return server_error(response.status);
+				}
+				let response_parsed: Array<{
+					age_display: string;
+					sex: string;
+					disease: string;
+				}> = (await response.json())["results"];
+
+				response_parsed.forEach((item) => {
+					if (!disease_mapping.has(item.disease)) {
+						disease_mapping.set(item.disease, 1);
+					} else {
+						disease_mapping.set(
+							item.disease,
+							disease_mapping.get(item.disease) + 1,
+						);
+					}
+					local_result.result.age_summary[item.age_display.split(" ")[0]] += 1;
+					local_result.result.sex_summary[item.sex] += 1;
+				});
+				for (let entry of disease_mapping.entries()) {
+					local_result.result.disease_summary.push({
+						disease: entry[0],
+						count: entry[1],
+					});
+				}
+				result = local_result;
+			} catch (err) {
+				return {
+					content: [{ text: "Network or Server Error", type: "text" }],
+					isError: true,
+				};
+			}
+		} else {
+			try {
+				let response = await fetch(
+					PBMC_API_URL_DOCS +
+						"metadata/" +
+						`?sex=${sex}&disease=${disease}&limit=30`,
+				);
+				if (!response.ok) {
+					return server_error(response.status);
+				}
+				result.result = (await response.json())["results"].map((item) => {
+					return {
+						sample_id: item.sample_id,
+						study_id: item.study_id,
+						age: item.age_display,
+						sex: item.sex,
+						disease: item.disease,
+					};
+				});
+			} catch (err) {
+				return {
+					content: [{ text: "Network or Server Error", type: "text" }],
+					isError: true,
+				};
+			}
+		}
+		return {
+			content: [{ text: JSON.stringify(result), type: "text" }],
+			structuredContent: result,
+		};
+	},
+);
 server.registerTool(
 	"getAntibodyChains",
 	{

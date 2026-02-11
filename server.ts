@@ -292,7 +292,13 @@ server.registerTool(
 		},
 	},
 	async ({ disease, summarize, sex }) => {
-		let result;
+		let result = {};
+		if (sex == "none") {
+			sex = "";
+		}
+		if (disease == "none") {
+			disease = "";
+		}
 		if (summarize) {
 			let local_result: {
 				result: {
@@ -317,12 +323,6 @@ server.registerTool(
 			};
 
 			let disease_mapping: Map<string, number> = new Map();
-			if (sex == "none") {
-				sex = "";
-			}
-			if (disease == "none") {
-				disease = "";
-			}
 
 			try {
 				let response = await fetch(
@@ -368,16 +368,24 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-						"metadata/" +
+						"v1/metadata" +
 						`?sex=${sex}&disease=${disease}&limit=30`,
 				);
 				if (!response.ok) {
 					return server_error(response.status);
 				}
-				result.result = (await response.json())["results"].map((item) => {
+				let tmp: Array<{
+					sample_id: string;
+					study: string;
+					age_display: number;
+					sex: string;
+					disease: string;
+				}> = (await response.json())["results"];
+
+				result.result = tmp.map((item) => {
 					return {
 						sample_id: item.sample_id,
-						study_id: item.study_id,
+						study_id: item.study,
 						age: item.age_display,
 						sex: item.sex,
 						disease: item.disease,
@@ -385,7 +393,7 @@ server.registerTool(
 				});
 			} catch (err) {
 				return {
-					content: [{ text: "Network or Server Error", type: "text" }],
+					content: [{ text: `Network or Server Error: ${err}`, type: "text" }],
 					isError: true,
 				};
 			}

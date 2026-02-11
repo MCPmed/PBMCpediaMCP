@@ -162,6 +162,92 @@ const offsetParam = z
 	);
 
 server.registerTool(
+	"getAntibodyChains",
+	{
+		title: "Antibody Chains by Clone",
+		description:
+			"Queries the PBMCpedia webserver for the antibody chains matched to the given clonotype",
+		inputSchema: {
+			clone: z.number().describe("ID of the clone").gte(0).int(),
+		},
+		outputSchema: {
+			result: z
+				.array(
+					z.object({
+						cell_id: z
+							.string()
+							.describe(
+								"ID of the cell within the dataset that matched this clonotype",
+							),
+						locus: z.string(),
+						v_call: z
+							.string()
+							.describe(
+								"Name of the matched V (variable) gene or 'nan' if none was matched",
+							),
+						d_call: z
+							.string()
+							.describe(
+								"Name of the matched D (diverse) gene or 'nan' if none was matched",
+							),
+						j_call: z
+							.string()
+							.describe(
+								"Name of the matched J (join) gene or 'nan' if none was matched",
+							),
+						c_call: z
+							.string()
+							.describe(
+								"Name of the matched C (constant) gene or 'nan' if none was matched",
+							),
+						junction_aa: z
+							.string()
+							.describe(
+								"One-letter coded amino acid sequence matched at the junction or 'nan' if none was matched",
+							),
+						cdr3: z
+							.string()
+							.describe(
+								"DNA sequence of the matched CDR3 (antigen-binding) part of the receptor or 'nan' if none was matched",
+							),
+						cdr3_aa: z
+							.string()
+							.describe(
+								"One-letter coded amino acid sequence matched in the CDR3 part or 'nan' if none was matched",
+							),
+						productive: z
+							.boolean()
+							.describe(
+								"whether the matched chain is a functional (productive) receptor",
+							),
+					}),
+				)
+				.describe("List containing all matches of the queried clonotype"),
+		},
+	},
+	async ({ clone }) => {
+		try {
+			let response = await fetch(
+				PBMC_API_URL_DOCS + "chains-by-clone?clone_id=" + clone,
+			);
+			if (!response.ok) {
+				return server_error(response.status);
+			}
+			let response_parsed = (await response.json())["rows"];
+			let result = { result: response_parsed };
+			return {
+				content: [{ type: "text", text: JSON.stringify(result) }],
+				structuredContent: result,
+			};
+		} catch (err) {
+			return {
+				content: [{ type: "text", text: "Network or Server error" }],
+				isError: true,
+			};
+		}
+	},
+);
+server.registerTool(
 	"getDEperCellType",
 	{
 		title: "Differential Expression per Cell Type",

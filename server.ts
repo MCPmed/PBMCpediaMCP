@@ -8,6 +8,7 @@ import * as cheerio from "cheerio";
 
 import { z } from "zod";
 
+const PBMC_API_URL = "https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/";
 const DISEASES = [
 	"Inflammation",
 	"Respiratory system disorder",
@@ -63,32 +64,32 @@ const server = new McpServer({
 	version: "1.0.0",
 });
 
+function server_error(status: number) {
+	return {
+		content: [
+			{
+				type: "text",
+				text: `Server returned error code ${status}`,
+			},
+		],
+		isError: true,
+	};
+}
 async function fetch_pbmcpedia_per_celltype(
 	endpoint: string,
 	parameters: string,
 	celltypes: Array<string>,
 	results_array: Array<{ [key: string]: any }>,
 	desired_properties: Array<string>,
+	result_name: string,
 ) {
 	for (let celltype of celltypes) {
 		try {
 			let response = await fetch(
-				"https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/" +
-					endpoint +
-					"?cell_type=" +
-					celltype +
-					parameters,
+				PBMC_API_URL + endpoint + "?cell_type=" + celltype + parameters,
 			);
 			if (!response.ok) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Server returned error code ${response.status}`,
-						},
-					],
-					isError: true,
-				};
+				return server_error(response.status);
 			}
 			let response_parsed: Array<{
 				[key: string]: any;
@@ -106,7 +107,7 @@ async function fetch_pbmcpedia_per_celltype(
 				return properties;
 			});
 			let result_obj = { cell_type: celltype };
-			result_obj[endpoint] = result_arr;
+			result_obj[result_name] = result_arr;
 			results_array.push(result_obj);
 		} catch (err) {
 			return {
@@ -157,12 +158,236 @@ const offsetParam = z
 	.describe(
 		"How many elements to skip in the beginning of the result list for every cell type (after applying other query filters and before applying the limit).",
 	);
+
+server.registerTool(
+	"getExpressionPerGene",
+	{
+		title: "Gene Expression querying Tool",
+		description:
+			"Queries the PBMCpedia webserver for gene expression using the provided parameters. Returns a list containing the gene expression per gene and celltype.",
+		inputSchema: {
+			limit: limitParam,
+			offset: offsetParam,
+			genes: z
+				.array(z.string())
+				.describe("Names of the genes for which to query gene expression."),
+			fine: z
+				.boolean()
+				.describe(
+					"Whether to return gene expression split by fine-grained cell type distinction",
+				),
+			broad: z
+				.boolean()
+				.describe(
+					"Whether to return gene expression split by broad cell type distinction",
+				),
+		},
+		outputSchema: {
+			result: z.union([
+				z.object({
+					fine: z.array(
+						z.object({
+							gene: z.string().describe("gene name"),
+							expression: z.array(
+								z.object({
+									celltype: z
+										.string()
+										.describe("Cell type of the expression data"),
+									mean_expression: z
+										.number()
+										.describe("Mean expression of this cell type"),
+								}),
+							),
+						}),
+					),
+				}),
+				z.object({
+					fine: z
+						.array(
+							z.object({
+								gene: z.string().describe("gene name"),
+								expression: z.array(
+									z.object({
+										celltype: z
+											.string()
+											.describe("Cell type of the expression data"),
+										mean_expression: z
+											.number()
+											.describe("Mean expression of this cell type"),
+									}),
+								),
+							}),
+						)
+						.describe(
+							"Mean expression per cell type and gene for a fine-grained distinction of cell types",
+						),
+					broad: z
+						.array(
+							z.object({
+								gene: z.string().describe("gene name"),
+								expression: z.array(
+									z.object({
+										celltype: z
+											.string()
+											.describe("Cell type of the expression data"),
+										mean_expression: z
+											.number()
+											.describe("Mean expression of this cell type and gene"),
+									}),
+								),
+							}),
+						)
+						.describe(
+							"Mean expression per cell type and gene for a broad distinction of cell types",
+						),
+				}),
+				z.object({
+					broad: z
+						.array(
+							z.object({
+								gene: z.string().describe("gene name"),
+								expression: z.array(
+									z.object({
+										celltype: z
+											.string()
+											.describe("Cell type of the expression data"),
+										mean_expression: z
+											.number()
+											.describe("Mean expression of this cell type and gene"),
+									}),
+								),
+							}),
+						)
+						.describe(
+							"Mean expression per cell type and gene for a broad distinction of cell types",
+						),
+				}),
+			]),
+		},
+	},
+	async ({ limit, offset, genes, fine, broad }) => {
+		let result: { result: { [key: string]: any } } = { result: {} };
+		let genes_url = genes.map((item) => {
+			return `&genes=${encodeURIComponent(item)}`;
+		});
+		let request_url =
+			PBMC_API_URL + `gene_expr_celltype?limit=${limit}&offset=${offset}`;
+		for (let gene of genes_url) {
+			request_url += gene;
+		}
+		if (request_url.length >= 4078) {
+			return {
+				content: [
+					{
+						text: "Too many genes requested. Please try again with less",
+						type: "text",
+					},
+				],
+				isError: true,
+			};
+		}
+		if (fine) {
+			try {
+				let response = await fetch(request_url + "&resolution=fine");
+				if (!response.ok) {
+					return server_error(response.status);
+				}
+				let response_parsed: Array<{
+					gene: string;
+					celltype: string;
+					mean_expression: number;
+					resolution: "fine";
+				}> = (await response.json())["results"];
+				let response_split: Map<
+					string,
+					Array<{ celltype: string; mean_expression: number }>
+				> = new Map();
+				response_parsed.forEach((item) => {
+					if (response_split.has(item.gene)) {
+						response_split
+							.get(item.gene)
+							.push({
+								celltype: item.celltype,
+								mean_expression: item.mean_expression,
+							});
+					} else {
+						response_split.set(item.gene, [
+							{
+								celltype: item.celltype,
+								mean_expression: item.mean_expression,
+							},
+						]);
+					}
+				});
+				result.result.fine = [];
+
+				for (let entry of response_split.entries()) {
+					result.result.fine.push({ gene: entry[0], expression: entry[1] });
+				}
+			} catch (err) {
+				return {
+					content: [{ text: "Network or response format error", type: "text" }],
+					isError: true,
+				};
+			}
+		}
+		if (broad) {
+			try {
+				let response = await fetch(request_url + "&resolution=broad");
+				if (!response.ok) {
+					return server_error(response.status);
+				}
+				let response_parsed: Array<{
+					gene: string;
+					celltype: string;
+					mean_expression: number;
+					resolution: "fine";
+				}> = (await response.json())["results"];
+				let response_split: Map<
+					string,
+					Array<{ celltype: string; mean_expression: number }>
+				> = new Map();
+				response_parsed.forEach((item) => {
+					if (response_split.has(item.gene)) {
+						response_split
+							.get(item.gene)
+							.push({
+								celltype: item.celltype,
+								mean_expression: item.mean_expression,
+							});
+					} else {
+						response_split.set(item.gene, [
+							{
+								celltype: item.celltype,
+								mean_expression: item.mean_expression,
+							},
+						]);
+					}
+				});
+				result.result.broad = [];
+
+				for (let entry of response_split.entries()) {
+					result.result.broad.push({ gene: entry[0], expression: entry[1] });
+				}
+			} catch (err) {
+				return {
+					content: [{ text: "Network or response format error", type: "text" }],
+					isError: true,
+				};
+			}
+		}
+		return {
+			content: [{ type: "text", text: JSON.stringify(result) }],
+			structuredContent: result,
+		};
+	},
+);
 server.registerTool(
 	"getPathways",
 	{
 		title: "Pathway querying Tool",
 		description:
-			"Queries the PBMCPedia webserver for pathways using the provided parameters. Returns a list containing the pathways. Pathway activity was measured between 'afflicted with disease/condition' and 'not afflicted with disease/condition'",
+			"Queries the PBMCpedia webserver for pathways using the provided parameters. Returns a list containing the pathways. Pathway activity was measured between 'afflicted with disease/condition' and 'not afflicted with disease/condition'",
 		inputSchema: {
 			ageGroup: ageGroupParam,
 			sex: sexParam,
@@ -275,6 +500,7 @@ server.registerTool(
 			celltype_fine,
 			result.fine,
 			["pathway_description", "pathway_id", "score", "p_value", "cell_type"],
+			"pathways",
 		);
 		if (res) {
 			return res;
@@ -285,6 +511,7 @@ server.registerTool(
 			celltype_broad,
 			result.broad,
 			["pathway_description", "pathway_id", "score", "p_value", "cell_type"],
+			"pathways",
 		);
 		if (res) {
 			return res;
@@ -407,6 +634,7 @@ server.registerTool(
 			celltype_fine,
 			result.fine,
 			["gene", "log2_fold_change", "p_value", "cell_type"],
+			"degs",
 		);
 		if (res) {
 			return res;
@@ -417,6 +645,7 @@ server.registerTool(
 			celltype_broad,
 			result.broad,
 			["gene", "log2_fold_change", "p_value", "cell_type"],
+			"degs",
 		);
 		if (res) {
 			return res;

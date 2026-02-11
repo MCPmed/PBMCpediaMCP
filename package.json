@@ -1,0 +1,17 @@
+{
+	"name": "pbmcpedia-mcp",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"express": "npm:express",
+		"@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk",
+		"zod": "npm:zod",
+		"cheerio": "npm:cheerio"
+	},
+	"devDependencies": {
+		"tsx": "npm:tsx@4.21.0"
+	},
+	"scripts": {
+		"start": "tsx server.ts"
+	}
+}

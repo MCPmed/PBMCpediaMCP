@@ -9,6 +9,7 @@ import * as cheerio from "cheerio";
 import { z } from "zod";
 
 const PBMC_API_URL = "https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/";
+const PBMC_API_URL_DOCS = "https://web.ccb.uni-saarland.de/pbmcpedia/api-docs/";
 const DISEASES = [
 	"Inflammation",
 	"Respiratory system disorder",
@@ -24,6 +25,7 @@ const DISEASES = [
 ] as const;
 const TYPES_BROAD = [
 	"T cell",
+	"B cell",
 	"NK cell",
 	"ILC",
 	"Progenitor cell",
@@ -160,6 +162,127 @@ const offsetParam = z
 	);
 
 server.registerTool(
+	"getDEperCellType",
+	{
+		title: "Differential Expression per Cell Type",
+		description:
+			"Queries the PBMCpedia webserver for the differential expression of the given genes with respect to the available cell types",
+		inputSchema: {
+			genes: z
+				.array(z.string())
+
+				.describe(
+					"Names of the genes for which to query differential expression.",
+				)
+				.max(1024),
+			// celltype: z
+			// 	.union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
+			// 	.describe("Cell type to fetch differential expression for"),
+		},
+		outputSchema: {
+			result: z.array(
+				z.object({
+					gene: z.string().describe("name of the gene"),
+					changes: z
+						.array(
+							z.object({
+								celltype: z
+									// .union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
+									.string()
+									.describe(
+										"Cell type for which differential expression was measured",
+									),
+								log2_fold_change: z
+									.number()
+									.describe(
+										"fold change between queried cell type and other cell types",
+									),
+								p_value: z
+									.number()
+									.describe("adjusted p_value for differential expression"),
+							}),
+						)
+						.describe(
+							"Every entry describes the differential expression between a cell type and the other cell types",
+						),
+				}),
+			),
+		},
+	},
+	async ({ genes }) => {
+		let result: {
+			result: Array<{
+				gene: string;
+				changes: Array<{
+					celltype: string;
+					log2_fold_change: number;
+					p_value: number;
+				}>;
+			}>;
+		} = { result: new Array() };
+		genes = genes.map((item) => {
+			return encodeURIComponent(item);
+		});
+		try {
+			let response = await fetch(
+				PBMC_API_URL_DOCS +
+					"marker-table-ds" +
+					"?genes=" +
+					genes.reduce((prevItem, nowItem) => {
+						return prevItem + encodeURIComponent(",") + nowItem;
+					}),
+			);
+			if (!response.ok) {
+				return server_error(response.status);
+			}
+			let response_parsed: Array<{
+				gene: string;
+				celltype: string;
+				log2_fold_change: number;
+				adj_p_val: number;
+			}> = (await response.json())["data"];
+			let result_map: Map<
+				string,
+				{
+					gene: string;
+					changes: Array<{
+						celltype: string;
+						log2_fold_change: number;
+						p_value: number;
+					}>;
+				}
+			> = new Map();
+			response_parsed.forEach((item) => {
+				if (!result_map.has(item.gene)) {
+					result_map.set(item.gene, { gene: item.gene, changes: [] });
+				}
+				result_map.get(item.gene).changes.push({
+					celltype: item.celltype,
+					log2_fold_change: item.log2_fold_change,
+					p_value: item.adj_p_val,
+				});
+				// return {
+				// 	gene: item.gene,
+				// 	log2_fold_change: item.log2_fold_change,
+				// 	p_value: item.adj_p_val,
+				// };
+			});
+			for (let value of result_map.values()) {
+				result.result.push(value);
+			}
+		} catch (err) {
+			return {
+				content: [{ type: "text", text: "Network or Server error" }],
+				isError: true,
+			};
+		}
+		return {
+			content: [{ type: "text", text: JSON.stringify(result) }],
+			structuredContent: result,
+		};
+	},
+);
+server.registerTool(
 	"getExpressionPerGene",
 	{
 		title: "Gene Expression querying Tool",
@@ -170,7 +293,8 @@ server.registerTool(
 			offset: offsetParam,
 			genes: z
 				.array(z.string())
-				.describe("Names of the genes for which to query gene expression."),
+				.describe("Names of the genes for which to query gene expression.")
+				.max(1024),
 			fine: z
 				.boolean()
 				.describe(
@@ -304,12 +428,10 @@ server.registerTool(
 				> = new Map();
 				response_parsed.forEach((item) => {
 					if (response_split.has(item.gene)) {
-						response_split
-							.get(item.gene)
-							.push({
-								celltype: item.celltype,
-								mean_expression: item.mean_expression,
-							});
+						response_split.get(item.gene).push({
+							celltype: item.celltype,
+							mean_expression: item.mean_expression,
+						});
 					} else {
 						response_split.set(item.gene, [
 							{
@@ -349,12 +471,10 @@ server.registerTool(
 				> = new Map();
 				response_parsed.forEach((item) => {
 					if (response_split.has(item.gene)) {
-						response_split
-							.get(item.gene)
-							.push({
-								celltype: item.celltype,
-								mean_expression: item.mean_expression,
-							});
+						response_split.get(item.gene).push({
+							celltype: item.celltype,
+							mean_expression: item.mean_expression,
+						});
 					} else {
 						response_split.set(item.gene, [
 							{

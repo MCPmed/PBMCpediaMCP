@@ -211,7 +211,9 @@ server.registerTool(
 						"&offset=" +
 						offset +
 						"&resolution=fine&disease=" +
-						disease,
+						disease +
+						"&ordering=" +
+						ordering,
 				);
 				if (!response.ok) {
 					return {
@@ -262,7 +264,9 @@ server.registerTool(
 						"&offset=" +
 						offset +
 						"&resolution=broad&disease=" +
-						disease,
+						disease +
+						"&ordering=" +
+						ordering,
 				);
 				if (!response.ok) {
 					return {

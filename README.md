@@ -38,3 +38,7 @@ in the server directory. This runs the local server in [tsx](https://tsx.is/), a
 , where `SERVER_NAME` is replaced by the identifier you want to use for the server (e.g. `PBMCpedia`) and `PORT` is replaced either by the default port number for the server or by the custom port, if you set it.
 
 This server uses publicy available API and requires no API keys. Standard rate limits imposed by the webserver will apply and may cause tool invocation to fail if called too frequently.
+
+## PBMCpedia information:
+- URL: https://web.ccb.uni-saarland.de/pbmcpedia/
+- Publication DOI: https://doi.org/10.1093/nar/gkaf1245

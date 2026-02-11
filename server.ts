@@ -195,21 +195,23 @@ server.registerTool(
 			fine: [],
 			broad: [],
 		};
+		celltype_fine = Array(...new Set(celltype_fine));
+		celltype_broad = Array(...new Set(celltype_broad));
 		for (let celltype of celltype_fine) {
 			try {
 				let response = await fetch(
 					"https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/degs?age=" +
-					ageGroup +
-					"&sex=" +
-					sex +
-					"&cell_type=" +
-					celltype +
-					"&limit=" +
-					limit +
-					"&offset=" +
-					offset +
-					"&resolution=fine&disease=" +
-					disease,
+						ageGroup +
+						"&sex=" +
+						sex +
+						"&cell_type=" +
+						celltype +
+						"&limit=" +
+						limit +
+						"&offset=" +
+						offset +
+						"&resolution=fine&disease=" +
+						disease,
 				);
 				if (!response.ok) {
 					return {
@@ -250,17 +252,17 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					"https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/degs?age=" +
-					ageGroup +
-					"&sex=" +
-					sex +
-					"&cell_type=" +
-					celltype +
-					"&limit=" +
-					limit +
-					"&offset=" +
-					offset +
-					"&resolution=broad&disease=" +
-					disease,
+						ageGroup +
+						"&sex=" +
+						sex +
+						"&cell_type=" +
+						celltype +
+						"&limit=" +
+						limit +
+						"&offset=" +
+						offset +
+						"&resolution=broad&disease=" +
+						disease,
 				);
 				if (!response.ok) {
 					return {

@@ -132,7 +132,7 @@ async function fetch_pbmcpedia_per_celltype(
 						properties[property] = item.pathway_decription;
 					}
 				}
-				let new_properties: { cell_type: string; [key: string]: any } =
+				let new_properties: { cell_type: string;[key: string]: any } =
 					properties;
 				return new_properties;
 			});
@@ -148,7 +148,7 @@ async function fetch_pbmcpedia_per_celltype(
 				> = new Map();
 				result_arr.forEach((item) => {
 					if (!result_map.has(item.cell_type)) {
-						let cool_array: Array<{ cell_type: string; [key: string]: any }> =
+						let cool_array: Array<{ cell_type: string;[key: string]: any }> =
 							new Array();
 						result_map.set(item.cell_type, cool_array);
 					}
@@ -327,8 +327,8 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-						"v1/metadata" +
-						`?sex=${sex}&disease=${disease}&limit=10000`,
+					"v1/metadata" +
+					`?sex=${sex}&disease=${disease}&limit=10000`,
 				);
 				if (!response.ok) {
 					return server_error(response.status);
@@ -368,8 +368,8 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-						"v1/metadata" +
-						`?sex=${sex}&disease=${disease}&limit=30`,
+					"v1/metadata" +
+					`?sex=${sex}&disease=${disease}&limit=30`,
 				);
 				if (!response.ok) {
 					return server_error(response.status);
@@ -536,11 +536,11 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-						"marker-table-ds" +
-						"?cell_type=" +
-						celltype +
-						"&genes=" +
-						gene,
+					"marker-table-ds" +
+					"?cell_type=" +
+					celltype +
+					"&genes=" +
+					gene,
 					// genes.reduce((prevItem, nowItem) => {
 					// 	return prevItem + "," + nowItem;
 					// }
@@ -1083,7 +1083,7 @@ server.registerResource(
 	{
 		title: "Service description", // Display name for UI
 	},
-	async (uri, {}) => ({
+	async (uri, { }) => ({
 		contents: [
 			{
 				uri: uri.href,
@@ -1115,7 +1115,7 @@ app.post("/mcp", async (req, res) => {
 const port = parseInt(process.env.PORT || "3002");
 app
 	.listen(port, () => {
-		console.log(`Demo MCP Server running on http://localhost:${port}/mcp`);
+		console.log(`MCP Server running on http://localhost:${port}/mcp`);
 	})
 	.on("error", (error) => {
 		console.error("Server error:", error);

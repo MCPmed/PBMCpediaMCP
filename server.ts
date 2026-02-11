@@ -25,8 +25,8 @@ const DISEASES = [
 ] as const;
 const TYPES_BROAD = [
 	"T cell",
-	"B cell",
 	"NK cell",
+	"B cell",
 	"ILC",
 	"Progenitor cell",
 	"Erythrocyte",
@@ -166,7 +166,7 @@ server.registerTool(
 	{
 		title: "Differential Expression per Cell Type",
 		description:
-			"Queries the PBMCpedia webserver for the differential expression of the given genes with respect to the available cell types",
+			"Queries the PBMCpedia webserver for the differential expression of the given genes with respect to the provided cell type",
 		inputSchema: {
 			genes: z
 				.array(z.string())
@@ -175,49 +175,32 @@ server.registerTool(
 					"Names of the genes for which to query differential expression.",
 				)
 				.max(1024),
-			// celltype: z
-			// 	.union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
-			// 	.describe("Cell type to fetch differential expression for"),
+			celltype: z
+				.union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
+				.describe("Cell type to fetch differential expression for"),
 		},
 		outputSchema: {
 			result: z.array(
 				z.object({
 					gene: z.string().describe("name of the gene"),
-					changes: z
-						.array(
-							z.object({
-								celltype: z
-									// .union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
-									.string()
-									.describe(
-										"Cell type for which differential expression was measured",
-									),
-								log2_fold_change: z
-									.number()
-									.describe(
-										"fold change between queried cell type and other cell types",
-									),
-								p_value: z
-									.number()
-									.describe("adjusted p_value for differential expression"),
-							}),
-						)
+					log2_fold_change: z
+						.number()
 						.describe(
-							"Every entry describes the differential expression between a cell type and the other cell types",
+							"fold change between queried cell type and other cell types",
 						),
+					p_value: z
+						.number()
+						.describe("adjusted p_value for differential expression"),
 				}),
 			),
 		},
 	},
-	async ({ genes }) => {
+	async ({ celltype, genes }) => {
 		let result: {
 			result: Array<{
 				gene: string;
-				changes: Array<{
-					celltype: string;
-					log2_fold_change: number;
-					p_value: number;
-				}>;
+				log2_fold_change: number;
+				p_value: number;
 			}>;
 		} = { result: new Array() };
 		genes = genes.map((item) => {
@@ -227,9 +210,11 @@ server.registerTool(
 			let response = await fetch(
 				PBMC_API_URL_DOCS +
 					"marker-table-ds" +
-					"?genes=" +
+					"?cell_type=" +
+					celltype +
+					"&genes=" +
 					genes.reduce((prevItem, nowItem) => {
-						return prevItem + encodeURIComponent(",") + nowItem;
+						return prevItem + "," + nowItem;
 					}),
 			);
 			if (!response.ok) {
@@ -241,35 +226,13 @@ server.registerTool(
 				log2_fold_change: number;
 				adj_p_val: number;
 			}> = (await response.json())["data"];
-			let result_map: Map<
-				string,
-				{
-					gene: string;
-					changes: Array<{
-						celltype: string;
-						log2_fold_change: number;
-						p_value: number;
-					}>;
-				}
-			> = new Map();
-			response_parsed.forEach((item) => {
-				if (!result_map.has(item.gene)) {
-					result_map.set(item.gene, { gene: item.gene, changes: [] });
-				}
-				result_map.get(item.gene).changes.push({
-					celltype: item.celltype,
+			result.result = response_parsed.map((item) => {
+				return {
+					gene: item.gene,
 					log2_fold_change: item.log2_fold_change,
 					p_value: item.adj_p_val,
-				});
-				// return {
-				// 	gene: item.gene,
-				// 	log2_fold_change: item.log2_fold_change,
-				// 	p_value: item.adj_p_val,
-				// };
+				};
 			});
-			for (let value of result_map.values()) {
-				result.result.push(value);
-			}
 		} catch (err) {
 			return {
 				content: [{ type: "text", text: "Network or Server error" }],

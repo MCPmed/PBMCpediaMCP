@@ -202,14 +202,14 @@ const limitParam = z
 	.gt(0)
 	.default(100)
 	.describe(
-		"Fetch at most this many results per cell type (after applying other query filters except for 'offset').",
+		"Fetch at most this many results (after applying other query filters except for 'offset'). If cell types are explicitly specified, fetch at most this many results per cell type.",
 	);
 const offsetParam = z
 	.number()
 	.gte(0)
 	.default(0)
 	.describe(
-		"How many elements to skip in the beginning of the result list for every cell type (after applying other query filters and before applying the limit).",
+		"How many elements to skip in the beginning of the result list (after applying other query filters and before applying the limit).",
 	);
 
 server.registerTool(

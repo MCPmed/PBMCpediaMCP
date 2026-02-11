@@ -603,24 +603,25 @@ server.registerTool(
 				),
 		},
 		outputSchema: {
-			result: z.union([
-				z.object({
-					fine: z.array(
-						z.object({
-							gene: z.string().describe("gene name"),
-							expression: z.array(
-								z.object({
-									celltype: z
-										.string()
-										.describe("Cell type of the expression data"),
-									mean_expression: z
-										.number()
-										.describe("Mean expression of this cell type"),
-								}),
-							),
-						}),
-					),
-				}),
+			result:
+				// z.union([
+				// z.object({
+				// 	fine: z.array(
+				// 		z.object({
+				// 			gene: z.string().describe("gene name"),
+				// 			expression: z.array(
+				// 				z.object({
+				// 					celltype: z
+				// 						.string()
+				// 						.describe("Cell type of the expression data"),
+				// 					mean_expression: z
+				// 						.number()
+				// 						.describe("Mean expression of this cell type"),
+				// 				}),
+				// 			),
+				// 		}),
+				// 	),
+				// }),
 				z.object({
 					fine: z
 						.array(
@@ -661,28 +662,28 @@ server.registerTool(
 							"Mean expression per cell type and gene for a broad distinction of cell types",
 						),
 				}),
-				z.object({
-					broad: z
-						.array(
-							z.object({
-								gene: z.string().describe("gene name"),
-								expression: z.array(
-									z.object({
-										celltype: z
-											.string()
-											.describe("Cell type of the expression data"),
-										mean_expression: z
-											.number()
-											.describe("Mean expression of this cell type and gene"),
-									}),
-								),
-							}),
-						)
-						.describe(
-							"Mean expression per cell type and gene for a broad distinction of cell types",
-						),
-				}),
-			]),
+			// 	z.object({
+			// 		broad: z
+			// 			.array(
+			// 				z.object({
+			// 					gene: z.string().describe("gene name"),
+			// 					expression: z.array(
+			// 						z.object({
+			// 							celltype: z
+			// 								.string()
+			// 								.describe("Cell type of the expression data"),
+			// 							mean_expression: z
+			// 								.number()
+			// 								.describe("Mean expression of this cell type and gene"),
+			// 						}),
+			// 					),
+			// 				}),
+			// 			)
+			// 			.describe(
+			// 				"Mean expression per cell type and gene for a broad distinction of cell types",
+			// 			),
+			// 	}),
+			// ]),
 		},
 	},
 	async ({ limit, offset, genes, fine, broad }) => {
@@ -706,6 +707,8 @@ server.registerTool(
 				isError: true,
 			};
 		}
+		result.result.fine = [];
+
 		if (fine) {
 			try {
 				let response = await fetch(request_url + "&resolution=fine");
@@ -737,7 +740,6 @@ server.registerTool(
 						]);
 					}
 				});
-				result.result.fine = [];
 
 				for (let entry of response_split.entries()) {
 					result.result.fine.push({ gene: entry[0], expression: entry[1] });
@@ -749,6 +751,8 @@ server.registerTool(
 				};
 			}
 		}
+		result.result.broad = [];
+
 		if (broad) {
 			try {
 				let response = await fetch(request_url + "&resolution=broad");
@@ -780,7 +784,6 @@ server.registerTool(
 						]);
 					}
 				});
-				result.result.broad = [];
 
 				for (let entry of response_split.entries()) {
 					result.result.broad.push({ gene: entry[0], expression: entry[1] });

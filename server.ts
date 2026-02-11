@@ -495,28 +495,25 @@ server.registerTool(
 	{
 		title: "Differential Expression per Cell Type",
 		description:
-			"Queries the PBMCpedia webserver for the differential expression of the given genes with respect to the provided cell type",
+			"Queries the PBMCpedia webserver for the differential expression of the given genes with respect to the provided cell type.",
 		inputSchema: {
 			genes: z
 				.array(z.string())
 
 				.describe(
 					"Names of the genes for which to query differential expression.",
-				)
-				.max(1024),
+				),
 			celltype: z
 				.union([z.enum(TYPES_BROAD), z.enum(TYPES_FINE)])
-				.describe("Cell type to fetch differential expression for"),
+				.describe("Cell type to fetch differential expression for."),
 		},
 		outputSchema: {
 			result: z.array(
 				z.object({
 					gene: z.string().describe("name of the gene"),
-					log2_fold_change: z
-						.number()
-						.describe(
-							"fold change between queried cell type and other cell types",
-						),
+					log2_fold_change: z.number().describe(
+						"fold change for this gene and cell type", //between queried cell type and other cell types",
+					),
 					p_value: z
 						.number()
 						.describe("adjusted p_value for differential expression"),
@@ -535,39 +532,46 @@ server.registerTool(
 		genes = genes.map((item) => {
 			return encodeURIComponent(item);
 		});
-		try {
-			let response = await fetch(
-				PBMC_API_URL_DOCS +
-					"marker-table-ds" +
-					"?cell_type=" +
-					celltype +
-					"&genes=" +
-					genes.reduce((prevItem, nowItem) => {
-						return prevItem + "," + nowItem;
+		for (let gene of genes) {
+			try {
+				let response = await fetch(
+					PBMC_API_URL_DOCS +
+						"marker-table-ds" +
+						"?cell_type=" +
+						celltype +
+						"&genes=" +
+						gene,
+					// genes.reduce((prevItem, nowItem) => {
+					// 	return prevItem + "," + nowItem;
+					// }
+					//	),
+				);
+				if (!response.ok) {
+					return server_error(response.status);
+				}
+				let response_parsed: Array<{
+					gene: string;
+					celltype: string;
+					log2_fold_change: number;
+					adj_p_val: number;
+				}> = (await response.json())["data"];
+				result.result.push(
+					...response_parsed.map((item) => {
+						return {
+							gene: item.gene,
+							log2_fold_change: item.log2_fold_change,
+							p_value: item.adj_p_val,
+						};
 					}),
-			);
-			if (!response.ok) {
-				return server_error(response.status);
-			}
-			let response_parsed: Array<{
-				gene: string;
-				celltype: string;
-				log2_fold_change: number;
-				adj_p_val: number;
-			}> = (await response.json())["data"];
-			result.result = response_parsed.map((item) => {
+				);
+			} catch (err) {
 				return {
-					gene: item.gene,
-					log2_fold_change: item.log2_fold_change,
-					p_value: item.adj_p_val,
+					content: [{ type: "text", text: "Network or Server error" }],
+					isError: true,
 				};
-			});
-		} catch (err) {
-			return {
-				content: [{ type: "text", text: "Network or Server error" }],
-				isError: true,
-			};
+			}
 		}
+
 		return {
 			content: [{ type: "text", text: JSON.stringify(result) }],
 			structuredContent: result,

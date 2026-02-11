@@ -11,9 +11,10 @@ import { toLowerCase } from "zod/v4";
 
 const PBMC_API_URL = "https://web.ccb.uni-saarland.de/pbmcpedia/api/v1/";
 const PBMC_API_URL_DOCS = "https://web.ccb.uni-saarland.de/pbmcpedia/api-docs/";
-const SEX_FOR_METADATA = ["male", "female", "unknown", ""] as const;
+const SEX_FOR_METADATA = ["male", "female", "unknown", "none"] as const;
 const DISEASES_FOR_METADATA = [
 	"Multisystem inflammatory syndrome in children (MIS-C)",
+	"Inflammation",
 	"COVID-19",
 	"Parkinson's Disease (PD)",
 	"Healthy Control",
@@ -29,7 +30,7 @@ const DISEASES_FOR_METADATA = [
 	"Sepsis (survived)",
 	"Sepsis (non-survived)",
 	"Premature Ovarian Insufficiency (POI)",
-	"",
+	"none",
 ] as const;
 const DISEASES = [
 	"Inflammation",
@@ -191,12 +192,12 @@ server.registerTool(
 		inputSchema: {
 			sex: z
 				.enum(SEX_FOR_METADATA)
-				.default("")
-				.describe("Passing an empty string (the default) disables this filter"),
+				.default("none")
+				.describe("Passing 'none' (the default) disables this filter"),
 			disease: z
 				.enum(DISEASES_FOR_METADATA)
-				.default("")
-				.describe("Passing an empty string (the default) disables this filter"),
+				.default("none")
+				.describe("Passing 'none' (the default) disables this filter"),
 			summarize: z
 				.boolean()
 				.default(true)
@@ -287,6 +288,12 @@ server.registerTool(
 			};
 
 			let disease_mapping: Map<string, number> = new Map();
+			if (sex == "none") {
+				sex = "";
+			}
+			if (disease == "none") {
+				disease = "";
+			}
 
 			try {
 				let response = await fetch(

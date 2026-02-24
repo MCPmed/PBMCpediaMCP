@@ -6,15 +6,19 @@ by Anthropic.
 
 It contains a single Typescript file representing an MCP interface for the respective webserver as well as a `package.json` containing dependencies. [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) is required for dependency management.
 
-Dependencies for the server can be installed globally for the using user by running 
+## Dependencies
+Dependencies for the server can be installed globally for the user by running 
 ```
 npm install
 ```
-in the server directory, or locally per directory by running
+in the server directory, or only for the server directory by running
 
 ```
 npm install -D
 ```
+in the same directory.
+
+## Running
 The server can then be run using
 ```
 npm tsx server.ts
@@ -24,19 +28,38 @@ or
 npm start
 ```
 in the server directory. This runs the local server in [tsx](https://tsx.is/), a wrapper for [NodeJS](https://github.com/nodejs/node) which supports TypeScript. By default, the server binds to a default port, but this can be adjusted by setting the 
-`PORT` environment variable to a desired port number. If you use a `mcp.json` file to configure your MCP servers, you should be able to add this server by adding
+`PORT` environment variable to a desired port number. 
+## Adding the MCP Server
+The following instructions assume that the server should appear as "SERVER_NAME" and runs on port "PORT". Replace these placeholders with your actual values (e.g. "PBMCpedia" and "3002").
+
+This approach applies to clients providing a JSON configuration file to configure your MCP servers, including Gemini CLI ("settings.json") and LM Studio ("mcp.json").
+You should be able to add this server by appending
 ```
-{
-  "mcpServers": {
-...
+
     "SERVER_NAME": {
       "url": "http://localhost:PORT/mcp"
     }
+```
+to your list of MCP server configurations, which is likely under 
+```
+{
+   "mcpServers":  {
+    HERE
   }
 }
 ```
-, where `SERVER_NAME` is replaced by the identifier you want to use for the server (e.g. `PBMCpedia`) and `PORT` is replaced either by the default port number for the server or by the custom port, if you set it.
 
+For Claude Desktop, you can follow these instructions:
+https://modelcontextprotocol.io/docs/develop/connect-remote-servers
+Set the name as "SERVER_NAME" and the connector address as "http://localhost:PORT/mcp"
+
+For Claude Code, run the command
+```
+claude mcp add --transport http SERVER_NAME http://localhost:PORT/mcp
+```
+
+
+## Note
 This server uses publicy available API and requires no API keys. Standard rate limits imposed by the webserver will apply and may cause tool invocation to fail if called too frequently.
 
 ## PBMCpedia information:

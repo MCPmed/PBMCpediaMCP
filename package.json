@@ -3,12 +3,14 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"express": "npm:express",
 		"@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk",
-		"zod": "npm:zod",
-		"cheerio": "npm:cheerio"
+		"cheerio": "npm:cheerio",
+		"express": "npm:express",
+		"minimist": "^1.2.8",
+		"zod": "npm:zod"
 	},
 	"devDependencies": {
+		"@types/minimist": "^1.2.5",
 		"tsx": "npm:tsx@4.21.0"
 	},
 	"scripts": {

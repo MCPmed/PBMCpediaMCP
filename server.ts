@@ -3,7 +3,9 @@ import {
 	ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
+import minimist from "minimist";
 import * as cheerio from "cheerio";
 
 import { unknown, z } from "zod";
@@ -82,6 +84,15 @@ const TYPES_FINE = [
 	"MAIT",
 	"Proliferating T cell",
 ] as const;
+var argv = minimist(process.argv.slice(2), {
+	default: { transport: "http" },
+	// unknown: (item) => {
+	// 	if (item != "transport") return false;
+	// 	else {
+	// 		return true;
+	// 	}
+	// },
+});
 // Create an MCP server
 const server = new McpServer({
 	name: "pbmcpedia-connect",
@@ -122,7 +133,6 @@ async function fetch_pbmcpedia_per_celltype(
 				cell_type: string;
 				[key: string]: any;
 			}> = (await response.json())["results"];
-			console.log(response_parsed);
 			let result_arr = response_parsed.map((item) => {
 				let properties = {};
 				for (let property of desired_properties) {
@@ -132,7 +142,7 @@ async function fetch_pbmcpedia_per_celltype(
 						properties[property] = item.pathway_decription;
 					}
 				}
-				let new_properties: { cell_type: string;[key: string]: any } =
+				let new_properties: { cell_type: string; [key: string]: any } =
 					properties;
 				return new_properties;
 			});
@@ -148,7 +158,7 @@ async function fetch_pbmcpedia_per_celltype(
 				> = new Map();
 				result_arr.forEach((item) => {
 					if (!result_map.has(item.cell_type)) {
-						let cool_array: Array<{ cell_type: string;[key: string]: any }> =
+						let cool_array: Array<{ cell_type: string; [key: string]: any }> =
 							new Array();
 						result_map.set(item.cell_type, cool_array);
 					}
@@ -327,8 +337,8 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-					"v1/metadata" +
-					`?sex=${sex}&disease=${disease}&limit=10000`,
+						"v1/metadata" +
+						`?sex=${sex}&disease=${disease}&limit=10000`,
 				);
 				if (!response.ok) {
 					return server_error(response.status);
@@ -368,8 +378,8 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-					"v1/metadata" +
-					`?sex=${sex}&disease=${disease}&limit=30`,
+						"v1/metadata" +
+						`?sex=${sex}&disease=${disease}&limit=30`,
 				);
 				if (!response.ok) {
 					return server_error(response.status);
@@ -536,11 +546,11 @@ server.registerTool(
 			try {
 				let response = await fetch(
 					PBMC_API_URL_DOCS +
-					"marker-table-ds" +
-					"?cell_type=" +
-					celltype +
-					"&genes=" +
-					gene,
+						"marker-table-ds" +
+						"?cell_type=" +
+						celltype +
+						"&genes=" +
+						gene,
 					// genes.reduce((prevItem, nowItem) => {
 					// 	return prevItem + "," + nowItem;
 					// }
@@ -1083,7 +1093,7 @@ server.registerResource(
 	{
 		title: "Service description", // Display name for UI
 	},
-	async (uri, { }) => ({
+	async (uri, {}) => ({
 		contents: [
 			{
 				uri: uri.href,
@@ -1093,31 +1103,41 @@ server.registerResource(
 	}),
 );
 
-// Set up Express and HTTP transport
-const app = express();
-app.use(express.json());
+if (argv.transport == "http") {
+	// Set up Express and HTTP transport
+	const app = express();
+	app.use(express.json());
 
-app.post("/mcp", async (req, res) => {
-	// Create a new transport for each request to prevent request ID collisions
-	const transport = new StreamableHTTPServerTransport({
-		sessionIdGenerator: undefined,
-		enableJsonResponse: true,
+	app.post("/mcp", async (req, res) => {
+		// Create a new transport for each request to prevent request ID collisions
+		const transport = new StreamableHTTPServerTransport({
+			sessionIdGenerator: undefined,
+			enableJsonResponse: true,
+		});
+
+		res.on("close", () => {
+			transport.close();
+		});
+
+		await server.connect(transport);
+		await transport.handleRequest(req, res, req.body);
 	});
 
-	res.on("close", () => {
-		transport.close();
-	});
-
-	await server.connect(transport);
-	await transport.handleRequest(req, res, req.body);
-});
-
-const port = parseInt(process.env.PORT || "3002");
-app
-	.listen(port, () => {
-		console.log(`MCP Server running on http://localhost:${port}/mcp`);
-	})
-	.on("error", (error) => {
-		console.error("Server error:", error);
-		process.exit(1);
-	});
+	const port = parseInt(process.env.PORT || "3002");
+	app
+		.listen(port, () => {
+			console.log(`MCP Server running on http://localhost:${port}/mcp`);
+		})
+		.on("error", (error) => {
+			console.error("Server error:", error);
+			process.exit(1);
+		});
+} else if (argv.transport == "stdio") {
+	{
+		const transport = new StdioServerTransport();
+		await server.connect(transport);
+	}
+} else {
+	console.error("Unknown transport");
+	process.exit(1);
+}
